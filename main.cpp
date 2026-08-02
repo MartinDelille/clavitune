@@ -5,8 +5,9 @@
 #include <mutex>
 #include <stdio.h>
 #include <stk/ADSR.h>
+#include <stk/BlitSquare.h>
+#include <stk/OnePole.h>
 #include <stk/RtAudio.h>
-#include <stk/SineWave.h>
 #include <stk/Stk.h>
 #include <thread>
 
@@ -26,6 +27,7 @@ std::queue<KeyEvent> keyEvents;
 struct NoteEvent {
   stk::StkFloat frequency;
   KeyAction action;
+  stk::StkFloat cutoff;
 };
 
 std::queue<NoteEvent> noteEvents;
@@ -44,31 +46,38 @@ void composerLoop() {
     auto keyEvent = keyEvents.front();
     keyEvents.pop();
 
-    noteEvents.push({notes[rand() % notes.size()], keyEvent.action});
+    NoteEvent noteEvent;
+    noteEvent.frequency = notes[rand() % notes.size()];
+    noteEvent.action = keyEvent.action;
+    noteEvent.cutoff = (rand() % 50 + 50) / 100.;
+    noteEvents.push(noteEvent);
   }
 }
 
-stk::SineWave *sine = nullptr;
+stk::BlitSquare *oscillator = nullptr;
 stk::ADSR *adsr = nullptr;
+stk::OnePole *filter = nullptr;
 
 int tick(void *outputBuffer, void *, unsigned int nFrames, double,
          RtAudioStreamStatus, void *userData) {
-  assert(sine != nullptr);
+  assert(oscillator != nullptr);
   assert(adsr != nullptr);
+  assert(filter != nullptr);
   float *buffer = static_cast<float *>(outputBuffer);
 
   if (!noteEvents.empty()) {
     auto noteEvent = noteEvents.front();
     noteEvents.pop();
     if (noteEvent.action == KeyAction::Down) {
-      sine->setFrequency(noteEvent.frequency);
+      oscillator->setFrequency(noteEvent.frequency);
       adsr->keyOn();
+      filter->setPole(noteEvent.cutoff);
     } else if (noteEvent.action == KeyAction::Up) {
       adsr->keyOff();
     }
   }
   for (unsigned int i = 0; i < nFrames; i++) {
-    float sample = sine->tick() * adsr->tick();
+    float sample = filter->tick(oscillator->tick() * adsr->tick());
 
     buffer[2 * i] = sample;
     buffer[2 * i + 1] = sample;
@@ -103,8 +112,9 @@ int main() {
   std::cout << "Using device: " << dac.getDeviceInfo(parameters.deviceId).name
             << std::endl;
   unsigned int bufferFrames = 256;
-  sine = new stk::SineWave();
+  oscillator = new stk::BlitSquare();
   adsr = new stk::ADSR();
+  filter = new stk::OnePole();
   adsr->setAttackTime(0.01);
   adsr->setDecayTime(0.1);
   adsr->setSustainLevel(0.8);
