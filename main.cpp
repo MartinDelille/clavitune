@@ -1,10 +1,12 @@
 #include <ApplicationServices/ApplicationServices.h>
+#include <cassert>
 #include <condition_variable>
 #include <iostream>
 #include <mutex>
 #include <stdio.h>
-#include <stk/Clarinet.h>
+#include <stk/ADSR.h>
 #include <stk/RtAudio.h>
+#include <stk/SineWave.h>
 #include <stk/Stk.h>
 #include <thread>
 
@@ -39,7 +41,6 @@ void composerLoop() {
       break;
     }
 
-    std::cout << "Key pressed, composing..." << std::endl;
     auto keyEvent = keyEvents.front();
     keyEvents.pop();
 
@@ -47,22 +48,27 @@ void composerLoop() {
   }
 }
 
+stk::SineWave *sine = nullptr;
+stk::ADSR *adsr = nullptr;
+
 int tick(void *outputBuffer, void *, unsigned int nFrames, double,
          RtAudioStreamStatus, void *userData) {
-  stk::Clarinet *clarinet = static_cast<::stk::Clarinet *>(userData);
+  assert(sine != nullptr);
+  assert(adsr != nullptr);
   float *buffer = static_cast<float *>(outputBuffer);
 
   if (!noteEvents.empty()) {
     auto noteEvent = noteEvents.front();
     noteEvents.pop();
     if (noteEvent.action == KeyAction::Down) {
-      clarinet->noteOn(noteEvent.frequency, 0.5);
+      sine->setFrequency(noteEvent.frequency);
+      adsr->keyOn();
     } else if (noteEvent.action == KeyAction::Up) {
-      clarinet->noteOff(0.5);
+      adsr->keyOff();
     }
   }
   for (unsigned int i = 0; i < nFrames; i++) {
-    float sample = clarinet->tick();
+    float sample = sine->tick() * adsr->tick();
 
     buffer[2 * i] = sample;
     buffer[2 * i + 1] = sample;
@@ -97,10 +103,15 @@ int main() {
   std::cout << "Using device: " << dac.getDeviceInfo(parameters.deviceId).name
             << std::endl;
   unsigned int bufferFrames = 256;
-  stk::Clarinet clarinet;
+  sine = new stk::SineWave();
+  adsr = new stk::ADSR();
+  adsr->setAttackTime(0.01);
+  adsr->setDecayTime(0.1);
+  adsr->setSustainLevel(0.8);
+  adsr->setReleaseTime(0.5);
 
   dac.openStream(&parameters, nullptr, RTAUDIO_FLOAT32, 44100, &bufferFrames,
-                 tick, &clarinet);
+                 tick);
 
   dac.startStream();
 
