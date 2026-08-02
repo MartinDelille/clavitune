@@ -12,10 +12,21 @@ std::mutex mtx;
 
 std::condition_variable cv;
 bool running = true;
-bool wake = false;
 
-bool playNote = false;
-stk::StkFloat currentNote = 0.0;
+enum class KeyAction { Down, Up };
+
+struct KeyEvent {
+  KeyAction action;
+};
+
+std::queue<KeyEvent> keyEvents;
+
+struct NoteEvent {
+  stk::StkFloat frequency;
+  KeyAction action;
+};
+
+std::queue<NoteEvent> noteEvents;
 
 std::vector<stk::StkFloat> notes = {261.63, 293.66, 329.63, 349.23,
                                     392.00, 440.00, 493.88, 523.25};
@@ -23,15 +34,16 @@ std::vector<stk::StkFloat> notes = {261.63, 293.66, 329.63, 349.23,
 void composerLoop() {
   while (running) {
     std::unique_lock<std::mutex> lock(mtx);
-    cv.wait(lock, [] { return wake || !running; });
+    cv.wait(lock, [] { return !keyEvents.empty() || !running; });
     if (!running) {
       break;
     }
-    wake = false;
 
     std::cout << "Key pressed, composing..." << std::endl;
-    currentNote = notes[rand() % notes.size()];
-    playNote = true;
+    auto keyEvent = keyEvents.front();
+    keyEvents.pop();
+
+    noteEvents.push({notes[rand() % notes.size()], keyEvent.action});
   }
 }
 
@@ -40,9 +52,14 @@ int tick(void *outputBuffer, void *, unsigned int nFrames, double,
   stk::Clarinet *clarinet = static_cast<::stk::Clarinet *>(userData);
   float *buffer = static_cast<float *>(outputBuffer);
 
-  if (playNote) {
-    clarinet->noteOn(currentNote, 0.8);
-    playNote = false;
+  if (!noteEvents.empty()) {
+    auto noteEvent = noteEvents.front();
+    noteEvents.pop();
+    if (noteEvent.action == KeyAction::Down) {
+      clarinet->noteOn(noteEvent.frequency, 0.5);
+    } else if (noteEvent.action == KeyAction::Up) {
+      clarinet->noteOff(0.5);
+    }
   }
   for (unsigned int i = 0; i < nFrames; i++) {
     float sample = clarinet->tick();
@@ -56,15 +73,13 @@ int tick(void *outputBuffer, void *, unsigned int nFrames, double,
 
 CGEventRef callback(CGEventTapProxy proxy, CGEventType type, CGEventRef event,
                     void *refcon) {
+  CGKeyCode keyCode =
+      (CGKeyCode)CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
   if (type == kCGEventKeyDown) {
-    CGKeyCode keyCode =
-        (CGKeyCode)CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
-
-    {
-      std::lock_guard<std::mutex> lock(mtx);
-      wake = true;
-    }
-
+    keyEvents.push({KeyAction::Down});
+    cv.notify_one();
+  } else if (type == kCGEventKeyUp) {
+    keyEvents.push({KeyAction::Up});
     cv.notify_one();
   }
 
