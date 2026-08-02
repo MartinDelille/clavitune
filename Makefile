@@ -1,8 +1,8 @@
-default: c b r
+default: c b kill r
 
-.PHONY: clean c b r
+.PHONY: clean c b kill r
 
-all: clean c b r
+all: clean c b kill r
 
 clean:
 	rm -rf build compile_commands.json
@@ -16,3 +16,6 @@ b:
 
 r:
 	./build/clavitune
+
+kill:
+	killall clavitune || exit 0
