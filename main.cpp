@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stk/ADSR.h>
 #include <stk/BlitSquare.h>
+#include <stk/JCRev.h>
 #include <stk/OnePole.h>
 #include <stk/RtAudio.h>
 #include <stk/Stk.h>
@@ -70,12 +71,14 @@ void composerLoop() {
 stk::BlitSquare *oscillator = nullptr;
 stk::ADSR *adsr = nullptr;
 stk::OnePole *filter = nullptr;
+stk::JCRev *reverb = nullptr;
 
 int tick(void *outputBuffer, void *, unsigned int nFrames, double,
          RtAudioStreamStatus, void *userData) {
   assert(oscillator != nullptr);
   assert(adsr != nullptr);
   assert(filter != nullptr);
+  assert(reverb != nullptr);
   float *buffer = static_cast<float *>(outputBuffer);
 
   if (!noteEvents.empty()) {
@@ -90,7 +93,10 @@ int tick(void *outputBuffer, void *, unsigned int nFrames, double,
     }
   }
   for (unsigned int i = 0; i < nFrames; i++) {
-    float sample = filter->tick(oscillator->tick() * adsr->tick());
+    float sample = oscillator->tick();
+    sample *= adsr->tick();
+    sample = filter->tick(sample);
+    sample = reverb->tick(sample);
 
     buffer[2 * i] = sample;
     buffer[2 * i + 1] = sample;
@@ -203,6 +209,8 @@ int main() {
   oscillator = new stk::BlitSquare();
   adsr = new stk::ADSR();
   filter = new stk::OnePole();
+  reverb = new stk::JCRev();
+  reverb->setEffectMix(0.99);
   adsr->setAttackTime(0.01);
   adsr->setDecayTime(0.1);
   adsr->setSustainLevel(0.8);
