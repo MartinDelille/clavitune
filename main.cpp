@@ -1,5 +1,26 @@
 #include <ApplicationServices/ApplicationServices.h>
-#include <stdio.h>
+#include <iostream>
+#include <mutex>
+#include <thread>
+
+std::mutex mtx;
+
+std::condition_variable cv;
+bool running = true;
+bool wake = false;
+
+void composerLoop() {
+  while (running) {
+    std::unique_lock<std::mutex> lock(mtx);
+    cv.wait(lock, [] { return wake || !running; });
+    if (!running) {
+      break;
+    }
+    wake = false;
+
+    std::cout << "Key pressed, composing..." << std::endl;
+  }
+}
 
 CGEventRef callback(CGEventTapProxy proxy, CGEventType type, CGEventRef event,
                     void *refcon) {
@@ -7,10 +28,15 @@ CGEventRef callback(CGEventTapProxy proxy, CGEventType type, CGEventRef event,
     CGKeyCode keyCode =
         (CGKeyCode)CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
 
-    printf("Key down: %d\n", keyCode);
+    {
+      std::lock_guard<std::mutex> lock(mtx);
+      wake = true;
+    }
+
+    cv.notify_one();
   }
 
-  return event; // return NULL to suppress the event
+  return event;
 }
 
 int main() {
@@ -33,6 +59,8 @@ int main() {
   CFRunLoopAddSource(CFRunLoopGetCurrent(), source, kCFRunLoopCommonModes);
 
   CGEventTapEnable(eventTap, true);
+
+  std::thread composerThread(composerLoop);
 
   CFRunLoopRun();
 
