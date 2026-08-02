@@ -1,1 +1,3 @@
 clavitune
+build/
+compile_commands.json

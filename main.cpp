@@ -20,7 +20,7 @@ int main() {
   CFMachPortRef eventTap =
       CGEventTapCreate(kCGHIDEventTap,        // capture at HID level
                        kCGHeadInsertEventTap, // insert before others
-                       kCGEventTapOptionDefault, mask, callback, NULL);
+                       kCGEventTapOptionDefault, mask, callback, nullptr);
 
   if (!eventTap) {
     fprintf(stderr, "Failed to create event tap\n");
