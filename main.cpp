@@ -5,9 +5,9 @@
 #include <mutex>
 #include <stdio.h>
 #include <stk/ADSR.h>
+#include <stk/BiQuad.h>
 #include <stk/BlitSquare.h>
 #include <stk/JCRev.h>
-#include <stk/OnePole.h>
 #include <stk/RtAudio.h>
 #include <stk/Stk.h>
 #include <thread>
@@ -57,7 +57,7 @@ void composerLoop() {
 
 stk::BlitSquare *oscillator = nullptr;
 stk::ADSR *adsr = nullptr;
-stk::OnePole *filter = nullptr;
+stk::BiQuad *filter = nullptr;
 stk::JCRev *reverb = nullptr;
 
 int tick(void *outputBuffer, void *, unsigned int nFrames, double,
@@ -74,7 +74,7 @@ int tick(void *outputBuffer, void *, unsigned int nFrames, double,
     if (noteEvent.action == KeyAction::Down) {
       oscillator->setFrequency(noteEvent.frequency);
       adsr->keyOn();
-      filter->setPole(noteEvent.cutoff);
+      filter->setB1(noteEvent.cutoff);
     } else if (noteEvent.action == KeyAction::Up) {
       adsr->keyOff();
     }
@@ -120,7 +120,7 @@ int main() {
   unsigned int bufferFrames = 256;
   oscillator = new stk::BlitSquare();
   adsr = new stk::ADSR();
-  filter = new stk::OnePole();
+  filter = new stk::BiQuad();
   reverb = new stk::JCRev();
   reverb->setEffectMix(0.99);
   adsr->setAttackTime(0.01);
