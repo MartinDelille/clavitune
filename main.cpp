@@ -1,4 +1,6 @@
+#ifdef __APPLE__
 #include <ApplicationServices/ApplicationServices.h>
+#endif
 #include <cassert>
 #include <condition_variable>
 #include <iostream>
@@ -9,6 +11,17 @@
 #include <stk/SineWave.h>
 #include <stk/Stk.h>
 #include <thread>
+#include <queue>
+#ifdef __linux__
+#include <cstring>
+#include <dirent.h>
+#include <fcntl.h>
+#include <linux/input.h>
+#include <poll.h>
+#include <string>
+#include <unistd.h>
+#include <vector>
+#endif
 
 std::mutex mtx;
 
@@ -77,6 +90,7 @@ int tick(void *outputBuffer, void *, unsigned int nFrames, double,
   return 0;
 }
 
+#ifdef __APPLE__
 CGEventRef callback(CGEventTapProxy proxy, CGEventType type, CGEventRef event,
                     void *refcon) {
   CGKeyCode keyCode =
@@ -91,6 +105,80 @@ CGEventRef callback(CGEventTapProxy proxy, CGEventType type, CGEventRef event,
 
   return event;
 }
+#endif
+
+#ifdef __linux__
+std::vector<int> findKeyboardFds() {
+  std::vector<int> fds;
+  DIR *dir = opendir("/dev/input");
+  if (!dir) {
+    return fds;
+  }
+
+  struct dirent *entry;
+  while ((entry = readdir(dir)) != nullptr) {
+    if (strncmp(entry->d_name, "event", 5) != 0) {
+      continue;
+    }
+
+    std::string path = std::string("/dev/input/") + entry->d_name;
+    int fd = open(path.c_str(), O_RDONLY | O_NONBLOCK);
+    if (fd < 0) {
+      continue;
+    }
+
+    unsigned long evBits = 0;
+    unsigned long keyBits[KEY_MAX / (8 * sizeof(unsigned long)) + 1] = {};
+    bool isKeyboard =
+        ioctl(fd, EVIOCGBIT(0, sizeof(evBits)), &evBits) >= 0 &&
+        (evBits & (1UL << EV_KEY)) &&
+        ioctl(fd, EVIOCGBIT(EV_KEY, sizeof(keyBits)), keyBits) >= 0 &&
+        (keyBits[KEY_A / (8 * sizeof(unsigned long))] &
+         (1UL << (KEY_A % (8 * sizeof(unsigned long)))));
+
+    if (isKeyboard) {
+      fds.push_back(fd);
+    } else {
+      close(fd);
+    }
+  }
+  closedir(dir);
+
+  return fds;
+}
+
+void linuxKeyboardLoop(std::vector<int> fds) {
+  std::vector<struct pollfd> pfds;
+  for (int fd : fds) {
+    pfds.push_back({fd, POLLIN, 0});
+  }
+
+  while (running) {
+    if (poll(pfds.data(), pfds.size(), 200) <= 0) {
+      continue;
+    }
+
+    for (auto &pfd : pfds) {
+      if (!(pfd.revents & POLLIN)) {
+        continue;
+      }
+
+      struct input_event ev;
+      while (read(pfd.fd, &ev, sizeof(ev)) == sizeof(ev)) {
+        if (ev.type != EV_KEY || ev.value == 2) {
+          continue;
+        }
+        keyEvents.push({ev.value == 1 ? KeyAction::Down : KeyAction::Up});
+        cv.notify_one();
+      }
+    }
+  }
+
+  for (int fd : fds) {
+    close(fd);
+  }
+}
+#endif
 
 int main() {
   stk::Stk::setSampleRate(44100);
@@ -115,6 +203,7 @@ int main() {
 
   dac.startStream();
 
+#ifdef __APPLE__
   CGEventMask mask =
       CGEventMaskBit(kCGEventKeyDown) | CGEventMaskBit(kCGEventKeyUp);
 
@@ -138,6 +227,18 @@ int main() {
   std::thread composerThread(composerLoop);
 
   CFRunLoopRun();
+#elif defined(__linux__)
+  auto keyboardFds = findKeyboardFds();
+  if (keyboardFds.empty()) {
+    fprintf(stderr, "No keyboard device found under /dev/input "
+                    "(is your user in the 'input' group?)\n");
+    return 1;
+  }
+
+  std::thread composerThread(composerLoop);
+  std::thread keyboardThread(linuxKeyboardLoop, std::move(keyboardFds));
+  keyboardThread.join();
+#endif
 
   dac.stopStream();
   dac.closeStream();
