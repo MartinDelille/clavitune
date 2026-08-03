@@ -11,7 +11,7 @@ if(APPLE)
   include_directories(/opt/homebrew/include)
 
   # Link directories
-  link_directories(/opt/homebrew/lib)
+  target_link_directories(clavitune PRIVATE /opt/homebrew/lib)
 
   add_compile_definitions(__OS_MACOSX__)
 
