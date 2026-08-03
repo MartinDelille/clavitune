@@ -10,6 +10,7 @@
 #include <stk/ADSR.h>
 #include <stk/BiQuad.h>
 #include <stk/BlitSquare.h>
+#include <stk/Delay.h>
 #include <stk/JCRev.h>
 #include <stk/RtAudio.h>
 #include <stk/Stk.h>
@@ -71,6 +72,7 @@ void composerLoop() {
 stk::BlitSquare *oscillator = nullptr;
 stk::ADSR *adsr = nullptr;
 stk::BiQuad *filter = nullptr;
+stk::Delay *delay = nullptr;
 stk::JCRev *reverb = nullptr;
 
 int tick(void *outputBuffer, void *, unsigned int nFrames, double,
@@ -78,6 +80,7 @@ int tick(void *outputBuffer, void *, unsigned int nFrames, double,
   assert(oscillator != nullptr);
   assert(adsr != nullptr);
   assert(filter != nullptr);
+  assert(delay != nullptr);
   assert(reverb != nullptr);
   float *buffer = static_cast<float *>(outputBuffer);
 
@@ -93,10 +96,15 @@ int tick(void *outputBuffer, void *, unsigned int nFrames, double,
     }
   }
   for (unsigned int i = 0; i < nFrames; i++) {
-    float sample = oscillator->tick();
-    sample *= adsr->tick();
+    float dry = oscillator->tick() * adsr->tick();
+    float delayed = delay->lastOut();
+
+    delay->tick(dry + delayed * 0.3);
+    float delayMix = 0.1;
+    float dryMix = 1.0 - delayMix;
+    float sample = delayed * delayMix + dry * dryMix;
     sample = filter->tick(sample);
-    sample = reverb->tick(sample);
+    sample = reverb->tick(sample) * 0.1;
 
     buffer[2 * i] = sample;
     buffer[2 * i + 1] = sample;
@@ -210,6 +218,7 @@ int main() {
   adsr = new stk::ADSR();
   filter = new stk::BiQuad();
   filter->setResonance(1000, 0.707, true);
+  delay = new stk::Delay(42050, 144100);
   reverb = new stk::JCRev();
   reverb->setEffectMix(0.99);
   adsr->setAttackTime(0.01);
