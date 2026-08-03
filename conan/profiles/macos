@@ -1,0 +1,9 @@
+include(common)
+
+[settings]
+os=Macos
+arch=armv8
+compiler=apple-clang
+compiler.version=15
+compiler.libcxx=libc++
+compiler.cppstd=gnu17
