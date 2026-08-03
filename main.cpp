@@ -5,13 +5,13 @@
 #include <condition_variable>
 #include <iostream>
 #include <mutex>
+#include <queue>
 #include <stdio.h>
 #include <stk/ADSR.h>
 #include <stk/RtAudio.h>
 #include <stk/SineWave.h>
 #include <stk/Stk.h>
 #include <thread>
-#include <queue>
 #ifdef __linux__
 #include <cstring>
 #include <dirent.h>
