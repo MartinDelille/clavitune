@@ -37,3 +37,11 @@ sudo usermod -aG input $USER
 
 Log out and back in (or `newgrp input`) for the group change to take
 effect.
+
+Conan's `libalsa` package doesn't ship the `alsa-plugins` ecosystem (pulse,
+pipewire, dmix, ...) and its own default config/plugin paths don't resolve
+once the library is relocated out of the Conan cache. `make r` points ALSA
+at the system's config and plugins (`/usr/share/alsa/alsa.conf` and the
+distro's `alsa-lib` plugin directory) at runtime to work around this — this
+requires an ALSA runtime (e.g. `libasound2`) to be installed on the system,
+which is normally already the case.

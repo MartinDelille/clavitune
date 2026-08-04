@@ -2,8 +2,6 @@ default: c b kill r
 
 .PHONY: clean deps c b kill r
 
-PROFILE ?= conan/profiles/macos
-
 all: clean_depts clean deps c b kill r
 
 clean:
@@ -22,8 +20,17 @@ c: deps
 b:
 	cmake --build --preset conan-release
 
+# Conan's libalsa package doesn't ship the alsa-plugins ecosystem (pulse,
+# pipewire, dmix, ...) or a working default plugin-dir baked into the
+# library, so point it at the system's ALSA config/plugins at runtime.
 r:
+ifeq ($(shell uname),Linux)
+	ALSA_CONFIG_PATH=/usr/share/alsa/alsa.conf \
+	ALSA_PLUGIN_DIR=$(shell pkg-config --variable=libdir alsa 2>/dev/null || echo /usr/lib/x86_64-linux-gnu)/alsa-lib \
 	./build/Release/clavitune
+else
+	./build/Release/clavitune
+endif
 
 kill:
 	killall clavitune || exit 0
