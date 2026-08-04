@@ -2,19 +2,15 @@
 
 ## Build
 
-Install `uv`, then build with:
+Install `uv`. Conan resolves dependencies using the committed profile for
+your OS (`conan/profiles/macos` or `conan/profiles/linux`) — STK on both
+platforms, ALSA on Linux; macOS's audio frameworks are provided by the OS
+itself — then generates a CMake toolchain and preset:
 
 ```
-make
-```
-
-`uv` manages the Conan 2 environment. Conan installs STK on both platforms
-and ALSA on Linux. The macOS audio frameworks remain provided by macOS itself.
-
-The build uses committed platform profiles. On Linux, run:
-
-```
-make PROFILE=conan/profiles/linux
+uv run conan install . --profile:all=conan/profiles/<macos|linux> --build=missing -s build_type=Release
+cmake --preset conan-release
+cmake --build --preset conan-release
 ```
 
 ## macOS

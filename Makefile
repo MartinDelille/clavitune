@@ -2,6 +2,12 @@ default: c b kill r
 
 .PHONY: clean deps c b kill r
 
+ifeq ($(shell uname),Darwin)
+PROFILE ?= conan/profiles/macos
+else
+PROFILE ?= conan/profiles/linux
+endif
+
 all: clean_depts clean deps c b kill r
 
 clean:
