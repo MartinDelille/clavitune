@@ -3,23 +3,33 @@ project(clavitune)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Include directories
-include_directories(/opt/homebrew/include)
-
-# Link directories
-link_directories(/opt/homebrew/lib)
+find_package(stk CONFIG REQUIRED)
 
 # Add the executable
 add_executable(clavitune main.cpp)
 
-add_compile_definitions(__OS_MACOSX__)
+if(APPLE)
+  add_compile_definitions(__OS_MACOSX__)
 
-# Link libraries
-target_link_libraries(clavitune
-  PRIVATE
-    stk
-  "-framework ApplicationServices"
-  "-framework CoreFoundation"
-  "-framework CoreAudio"
-  "-framework AudioToolbox"
-)
+  # Link libraries
+  target_link_libraries(clavitune
+    PRIVATE
+      stk::stk
+    "-framework ApplicationServices"
+    "-framework CoreFoundation"
+    "-framework CoreAudio"
+    "-framework AudioToolbox"
+  )
+elseif(UNIX)
+  find_package(ALSA CONFIG REQUIRED)
+  find_package(Threads REQUIRED)
+
+  add_compile_definitions(__LINUX_ALSA__)
+
+  target_link_libraries(clavitune
+    PRIVATE
+      stk::stk
+      ALSA::ALSA
+      Threads::Threads
+  )
+endif()

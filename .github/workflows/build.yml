@@ -1,0 +1,38 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build (${{ matrix.os.name }})
+    runs-on: ${{ matrix.os.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - name: ubuntu-24.04
+            profile: linux
+          - name: macos-14
+            profile: macos
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+
+      - run: uv sync --locked
+      - run: uv run conan install . --profile:all=conan/profiles/${{ matrix.os.profile }} --build=missing -s build_type=Release
+      - run: cmake --preset conan-release
+      - run: cmake --build --preset conan-release

@@ -1,3 +1,5 @@
-clavitune
 build/
+.venv/
 compile_commands.json
+CMakeUserPresets.json
+.envrc
