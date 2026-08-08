@@ -47,8 +47,9 @@ struct NoteEvent {
 
 std::queue<NoteEvent> noteEvents;
 
-std::vector<stk::StkFloat> notes = {261.63, 293.66, 329.63, 349.23,
-                                    392.00, 440.00, 493.88, 523.25};
+double frequency(int midiNote) {
+  return 440.0 * std::pow(2.0, (midiNote - 69) / 12.0);
+}
 
 void composerLoop() {
   while (running) {
@@ -62,7 +63,7 @@ void composerLoop() {
     keyEvents.pop();
 
     NoteEvent noteEvent;
-    noteEvent.frequency = notes[rand() % notes.size()];
+    noteEvent.frequency = frequency(10 + rand() % 48); // Random MIDI note
     noteEvent.action = keyEvent.action;
     noteEvent.cutoff = (rand() % 50 + 50) / 100.;
     noteEvents.push(noteEvent);
