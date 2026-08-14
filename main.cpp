@@ -8,8 +8,11 @@
 #include <queue>
 #include <stdio.h>
 #include <stk/ADSR.h>
+#include <stk/BiQuad.h>
+#include <stk/BlitSquare.h>
+#include <stk/Delay.h>
+#include <stk/JCRev.h>
 #include <stk/RtAudio.h>
-#include <stk/SineWave.h>
 #include <stk/Stk.h>
 #include <thread>
 #ifdef __linux__
@@ -39,12 +42,14 @@ std::queue<KeyEvent> keyEvents;
 struct NoteEvent {
   stk::StkFloat frequency;
   KeyAction action;
+  stk::StkFloat cutoff;
 };
 
 std::queue<NoteEvent> noteEvents;
 
-std::vector<stk::StkFloat> notes = {261.63, 293.66, 329.63, 349.23,
-                                    392.00, 440.00, 493.88, 523.25};
+double frequency(int midiNote) {
+  return 440.0 * std::pow(2.0, (midiNote - 69) / 12.0);
+}
 
 void composerLoop() {
   while (running) {
@@ -57,31 +62,50 @@ void composerLoop() {
     auto keyEvent = keyEvents.front();
     keyEvents.pop();
 
-    noteEvents.push({notes[rand() % notes.size()], keyEvent.action});
+    NoteEvent noteEvent;
+    noteEvent.frequency = frequency(10 + rand() % 48); // Random MIDI note
+    noteEvent.action = keyEvent.action;
+    noteEvent.cutoff = (rand() % 50 + 50) / 100.;
+    noteEvents.push(noteEvent);
   }
 }
 
-stk::SineWave *sine = nullptr;
+stk::BlitSquare *oscillator = nullptr;
 stk::ADSR *adsr = nullptr;
+stk::BiQuad *filter = nullptr;
+stk::Delay *delay = nullptr;
+stk::JCRev *reverb = nullptr;
 
 int tick(void *outputBuffer, void *, unsigned int nFrames, double,
          RtAudioStreamStatus, void *userData) {
-  assert(sine != nullptr);
+  assert(oscillator != nullptr);
   assert(adsr != nullptr);
+  assert(filter != nullptr);
+  assert(delay != nullptr);
+  assert(reverb != nullptr);
   float *buffer = static_cast<float *>(outputBuffer);
 
   if (!noteEvents.empty()) {
     auto noteEvent = noteEvents.front();
     noteEvents.pop();
     if (noteEvent.action == KeyAction::Down) {
-      sine->setFrequency(noteEvent.frequency);
+      oscillator->setFrequency(noteEvent.frequency);
       adsr->keyOn();
+      filter->setB1(noteEvent.cutoff);
     } else if (noteEvent.action == KeyAction::Up) {
       adsr->keyOff();
     }
   }
   for (unsigned int i = 0; i < nFrames; i++) {
-    float sample = sine->tick() * adsr->tick();
+    float dry = oscillator->tick() * adsr->tick();
+    float delayed = delay->lastOut();
+
+    delay->tick(dry + delayed * 0.3);
+    float delayMix = 0.1;
+    float dryMix = 1.0 - delayMix;
+    float sample = delayed * delayMix + dry * dryMix;
+    sample = filter->tick(sample);
+    sample = reverb->tick(sample) * 0.1;
 
     buffer[2 * i] = sample;
     buffer[2 * i + 1] = sample;
@@ -191,8 +215,13 @@ int main() {
   std::cout << "Using device: " << dac.getDeviceInfo(parameters.deviceId).name
             << std::endl;
   unsigned int bufferFrames = 256;
-  sine = new stk::SineWave();
+  oscillator = new stk::BlitSquare();
   adsr = new stk::ADSR();
+  filter = new stk::BiQuad();
+  filter->setResonance(1000, 0.707, true);
+  delay = new stk::Delay(42050, 144100);
+  reverb = new stk::JCRev();
+  reverb->setEffectMix(0.99);
   adsr->setAttackTime(0.01);
   adsr->setDecayTime(0.1);
   adsr->setSustainLevel(0.8);
