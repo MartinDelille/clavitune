@@ -1,0 +1,31 @@
+name: Check commits
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check-commit-messages:
+    name: Check commit messages
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reject temporary commit messages
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if bad_commits=$(git log --format='%H %s' \
+            "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}" | \
+            grep -Ei '^[^ ]+ [[:space:]]*(wip|fixup!|squash!|amend!)([[:space:]:!-]|$)'); then
+            echo "Found temporary commit(s) in this pull request:"
+            echo "$bad_commits"
+            exit 1
+          fi
